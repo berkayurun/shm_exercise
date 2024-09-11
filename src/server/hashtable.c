@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 HashTable *createHashTable(int size) {
   HashTable *table = (HashTable *)malloc(sizeof(HashTable));
@@ -85,12 +86,20 @@ void printHashTable(HashTable *table) {
   printf("--------------------------\n");
 }
 
+// https://en.wikipedia.org/wiki/Jenkins_hash_function
 int hash(char *key, int size) {
-  int hash = 0;
-  for (int i = 0; i < strlen(key); i++) {
-    hash += key[i];
+  int str_len = strlen(key);
+  uint32_t hash_value, i;
+  for(hash_value = i = 0; i < str_len; ++i)
+  {
+      hash_value += key[i];
+      hash_value += (hash_value << 10);
+      hash_value ^= (hash_value >> 6);
   }
-  return hash % size;
+  hash_value += (hash_value << 3);
+  hash_value ^= (hash_value >> 11);
+  hash_value += (hash_value << 15);
+  return hash_value % size;
 }
 
 void insertItem(HashTable *table, char *key, char *value) {
