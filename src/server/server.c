@@ -166,11 +166,12 @@ int main(int argc, char *argv[]) {
 
   startSHM();
 
-  pthread_t thread_id;
+  pthread_t thread_id[N_THREADS];
   for (int i = 0; i < N_THREADS; i++)
-    pthread_create(&thread_id, NULL, hashTableWorker, NULL);
+    pthread_create(&thread_id[i], NULL, hashTableWorker, NULL);
 
-  pthread_exit(NULL);
+  for (int i = 0; i < N_THREADS; i++)
+    pthread_join(thread_id[i], NULL);
 
   cleanSHM();
   return 0;
