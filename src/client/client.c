@@ -55,8 +55,8 @@ int main(int argc, char **argv) {
     if (sem_wait(mutex_sem) == -1)
       perror("sem_wait:mutex");
 
-    memcpy(&shared_mem_ptr->qs[shared_mem_ptr->producer_index], query,
-           sizeof(hashTableQuery));
+    memcpy(&shared_mem_ptr->qs[shared_mem_ptr->producer_index % MAX_QUERY_N],
+           query, sizeof(hashTableQuery));
 
     (shared_mem_ptr->producer_index)++;
 

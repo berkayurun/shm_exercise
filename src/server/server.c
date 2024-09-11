@@ -123,20 +123,8 @@ void *hashTableWorker(void *arg) {
     if (sem_wait(mutex_sem) == -1)
       perror("sem_wait:mutex");
 
-    // If we consumed everything, notify others and exit
-    if (shared_mem_ptr->consumer_index >= MAX_QUERY_N) {
-      perror("SHM is full exiting the server thread...");
-      if (sem_post(mutex_sem) == -1)
-        perror("sem_post: mutex_sem");
-      for (int i = 0; i < N_THREADS; i++) {
-        if (sem_post(consumer_sem) == -1) {
-          perror("sem_post: consumer_sem");
-        }
-      }
-      return NULL;
-    }
-
-    hashTableQuery query = shared_mem_ptr->qs[shared_mem_ptr->consumer_index];
+    hashTableQuery query =
+        shared_mem_ptr->qs[shared_mem_ptr->consumer_index % MAX_QUERY_N];
     (shared_mem_ptr->consumer_index)++;
 
     if (sem_post(mutex_sem) == -1)
