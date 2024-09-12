@@ -8,6 +8,8 @@
 #define MAX_QUERY_N 4096
 #define MAX_STRING 128
 
+#include <pthread.h>
+
 enum QueryType { INSERT, SEARCH, REMOVE, PRINT, PRINT_BUCKET, QUERY_TYPE_SIZE };
 
 typedef struct hashTableQuery {
@@ -20,6 +22,8 @@ struct shared_memory {
   hashTableQuery qs[MAX_QUERY_N];
   int producer_index;
   int consumer_index;
+  pthread_rwlock_t mem_lock;
+  pthread_rwlockattr_t mem_lock_attr;
 };
 
 #endif

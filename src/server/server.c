@@ -16,30 +16,23 @@
 
 #define N_THREADS 4
 
-sem_t *mutex_sem;
-sem_t *producer_sem;
 sem_t *consumer_sem;
 struct shared_memory *shared_mem_ptr;
 int fd_shm;
 
+int consumer_index;
+pthread_mutex_t consumer_index_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 HashTable *table;
 
 void startSHM(void) {
-  sem_unlink(SEM_MUTEX_NAME);
-  sem_unlink(SEM_PRODUCER_NAME);
   sem_unlink(SEM_CONSUMER_NAME);
-  if ((mutex_sem = sem_open(SEM_MUTEX_NAME, O_CREAT, 0660, 0)) == SEM_FAILED) {
-    perror("sem_open");
-  }
 
-  if ((producer_sem = sem_open(SEM_PRODUCER_NAME, O_CREAT, 0660, 0)) ==
-      SEM_FAILED) {
-    perror("sem_open");
-  }
   if ((consumer_sem = sem_open(SEM_CONSUMER_NAME, O_CREAT, 0660, 0)) ==
       SEM_FAILED) {
     perror("sem_open");
   }
+
   if ((fd_shm = shm_open(SHARED_MEM_NAME, O_RDWR | O_CREAT, 0660)) == -1) {
     perror("shm_open");
   }
@@ -53,26 +46,20 @@ void startSHM(void) {
     perror("mmap");
   }
   shared_mem_ptr->producer_index = 0;
-  shared_mem_ptr->consumer_index = 0;
+  consumer_index = 0;
 
-  // Increment so the client can start
-  if (sem_post(mutex_sem) == -1)
-    perror("sem_post: mutex_sem");
-
-  if (sem_post(producer_sem) == -1)
-    perror("sem_post: mutex_sem");
+  pthread_rwlockattr_init(&shared_mem_ptr->mem_lock_attr);
+  pthread_rwlockattr_setpshared(&shared_mem_ptr->mem_lock_attr, 1);
+  pthread_rwlock_init(&shared_mem_ptr->mem_lock,
+                      &shared_mem_ptr->mem_lock_attr);
 }
 
 void cleanSHM(void) {
-  sem_unlink(SEM_MUTEX_NAME);
-  sem_unlink(SEM_PRODUCER_NAME);
   sem_unlink(SEM_CONSUMER_NAME);
 
   // Free resources
   freeHashTable(table);
-  sem_close(mutex_sem);
-  sem_close(producer_sem);
-  sem_close(consumer_sem);
+
   munmap(shared_mem_ptr, sizeof(shared_mem_ptr));
 }
 
@@ -120,20 +107,16 @@ void *hashTableWorker(void *arg) {
     if (sem_wait(consumer_sem) == -1)
       perror("sem_wait: consumer_sem");
 
-    if (sem_wait(mutex_sem) == -1)
-      perror("sem_wait:mutex");
+    pthread_mutex_lock(&consumer_index_mutex);
+    int local_consumer_index = consumer_index++;
+    pthread_mutex_unlock(&consumer_index_mutex);
 
+    pthread_rwlock_rdlock(&shared_mem_ptr->mem_lock);
     hashTableQuery query =
-        shared_mem_ptr->qs[shared_mem_ptr->consumer_index % MAX_QUERY_N];
-    (shared_mem_ptr->consumer_index)++;
+        shared_mem_ptr->qs[local_consumer_index % MAX_QUERY_N];
+    pthread_rwlock_unlock(&shared_mem_ptr->mem_lock);
 
-    if (sem_post(mutex_sem) == -1)
-      perror("sem_post: mutex_sem");
-
-    if (sem_post(producer_sem) == -1)
-      perror("sem_post: producer_sem");
     // Critical section ended
-
     executeHashTableQuery(query);
   }
 }
