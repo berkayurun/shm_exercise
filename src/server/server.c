@@ -16,7 +16,7 @@
 
 #define N_THREADS 4
 
-sem_t *consumer_sem;
+sem_t *consumer_sem, *producer_sem;
 struct shared_memory *shared_mem_ptr;
 int fd_shm;
 
@@ -26,7 +26,13 @@ pthread_mutex_t consumer_index_mutex = PTHREAD_MUTEX_INITIALIZER;
 HashTable *table;
 
 void startSHM(void) {
+  sem_unlink(SEM_PRODUCER_NAME);
   sem_unlink(SEM_CONSUMER_NAME);
+
+  if ((producer_sem = sem_open(SEM_PRODUCER_NAME, O_CREAT, 0660, 0)) ==
+      SEM_FAILED) {
+    perror("sem_open");
+  }
 
   if ((consumer_sem = sem_open(SEM_CONSUMER_NAME, O_CREAT, 0660, 0)) ==
       SEM_FAILED) {
@@ -48,6 +54,11 @@ void startSHM(void) {
   shared_mem_ptr->producer_index = 0;
   consumer_index = 0;
 
+  for (int i = 0; i < N_THREADS; ++i) {
+    if (sem_post(producer_sem) == -1)
+      perror("sem_post: producer_sem");
+  }
+
   pthread_rwlockattr_init(&shared_mem_ptr->mem_lock_attr);
   pthread_rwlockattr_setpshared(&shared_mem_ptr->mem_lock_attr, 1);
   pthread_rwlock_init(&shared_mem_ptr->mem_lock,
@@ -55,11 +66,14 @@ void startSHM(void) {
 }
 
 void cleanSHM(void) {
+  sem_unlink(SEM_PRODUCER_NAME);
   sem_unlink(SEM_CONSUMER_NAME);
 
   // Free resources
   freeHashTable(table);
 
+  sem_close(producer_sem);
+  sem_close(consumer_sem);
   munmap(shared_mem_ptr, sizeof(shared_mem_ptr));
 }
 
@@ -115,6 +129,9 @@ void *hashTableWorker(void *arg) {
     hashTableQuery query =
         shared_mem_ptr->qs[local_consumer_index % MAX_QUERY_N];
     pthread_rwlock_unlock(&shared_mem_ptr->mem_lock);
+
+    if (sem_post(producer_sem) == -1)
+      perror("sem_post: producer_sem");
 
     // Critical section ended
     executeHashTableQuery(query);

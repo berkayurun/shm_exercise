@@ -79,8 +79,12 @@ int main(int argc, char **argv) {
   parseUserInput(argc, argv);
 
   struct shared_memory *shared_mem_ptr;
-  sem_t *consumer_sem;
+  sem_t *consumer_sem, *producer_sem;
   int fd_shm;
+
+  if ((producer_sem = sem_open(SEM_PRODUCER_NAME, O_CREAT, 0660, 0)) ==
+      SEM_FAILED)
+    perror("sem_open");
 
   if ((consumer_sem = sem_open(SEM_CONSUMER_NAME, O_CREAT, 0660, 0)) ==
       SEM_FAILED) {
@@ -107,6 +111,9 @@ int main(int argc, char **argv) {
     memcpy(query->value, value, MIN(strlen(value), MAX_STRING));
 
   // Enter critical section
+  if (sem_wait(producer_sem) == -1)
+    perror("sem_wait: producer_sem");
+
   pthread_rwlock_wrlock(&shared_mem_ptr->mem_lock);
 
   memcpy(&shared_mem_ptr->qs[shared_mem_ptr->producer_index % MAX_QUERY_N],
@@ -122,4 +129,5 @@ int main(int argc, char **argv) {
   // Free resources
   free(query);
   sem_close(consumer_sem);
+  sem_close(producer_sem);
 }
